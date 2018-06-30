@@ -1,2 +1,2 @@
 # movo
-To scale Monocular Visual Odometry using Epipolar Geometry
+Monocular Visual Odometry using Epipolar Geometry
