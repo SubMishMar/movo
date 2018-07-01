@@ -1,0 +1,26 @@
+%YAML:1.0
+---
+
+P0: !!opencv-matrix
+  rows: 3
+  cols: 4
+  dt: d
+  data: [7.188560000000e+02, 0.000000000000e+00, 6.071928000000e+02, 0.000000000000e+00, 0.000000000000e+00, 7.188560000000e+02, 1.852157000000e+02, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 1.000000000000e+00, 0.000000000000e+00]
+
+
+#For GFFT
+maxCorners: 1000
+qualityLevel: 0.01
+minDistance: 10
+blockSize: 3
+useHarrisDetector: true
+k: 0.04
+winSizeGFTT: 10
+
+#For FAST
+useFAST: False
+fast_threshold: 20
+nonmaxSuppression: true
+winSizeFAST: 10
+
+
