@@ -69,10 +69,6 @@ public:
 							std::vector<cv::Point2f> &corners,
 							cv::Mat mask_mat);
 
-	//detects FAST features
-	void detectFASTFeatures(cv::Mat img, 
-							std::vector<cv::Point2f> &corners);
-
 	//Caluclates optical flow and returns a status to represent points
 	//for which a valied tracked point has been found
 	std::vector<uchar> calculateOpticalFlow(cv::Mat img1, cv::Mat img2, 
@@ -133,4 +129,5 @@ public:
 
 	double findAvgError(std::vector<cv::Point2f> corners1,
 		     		    std::vector<cv::Point2f> corners2);
+	double getScale(int frame_id);
 };

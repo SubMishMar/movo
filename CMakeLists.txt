@@ -8,8 +8,7 @@ link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 add_executable( movo src/movo.cpp 
 		     src/filters.cpp 
-		     src/drawers.cpp 
-		     src/conversions.cpp
+		     src/drawers.cpp
 		     src/paramreader.cpp
 		     src/featureDetectionAndTracking.cpp 
 		     src/init.cpp )
