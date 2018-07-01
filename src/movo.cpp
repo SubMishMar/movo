@@ -1,12 +1,13 @@
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 #include "movo.h"
 
 double movo::getScale(int frame_id) {
   
   std::string line;
   int i = 0;
-  std::ifstream myfile ("/home/subodh/github-projects/mono-vo/datasets/kitti/poses/00.txt");
+  std::ifstream myfile ("../datasets/kitti/poses/00.txt");
   double x =0, y=0, z = 0;
   double x_prev, y_prev, z_prev;
   if (myfile.is_open()) {
@@ -77,8 +78,7 @@ void movo::continousOperation() {
 	detectGoodFeatures(database_img, 
 					   database_corners,
 					   cv::Mat::ones(rows, cols, CV_8UC1));
-	std::cout << database_corners.size() << std::endl;
-	// detectFASTFeatures(database_img, database_corners);
+
 	cv::Mat rvec, tvec;
 	std::vector<cv::Point3f> rvecs, tvecs;
 	std::vector<cv::Point2f> query_corners;
@@ -98,7 +98,7 @@ void movo::continousOperation() {
 									  database_corners, query_corners);
 		
 		filterbyStatus(status1, database_corners, query_corners);
-		std::cout << database_corners.size() << "\t" << query_corners.size() << "\t"<< query_id << std::endl;
+		//std::cout << database_corners.size() << "\t" << query_corners.size() << "\t"<< query_id << std::endl;
 		drawmatches(database_img, query_img, database_corners, query_corners);
 
 		mask = epipolarSearch(database_corners, query_corners, R, t);
@@ -111,6 +111,8 @@ void movo::continousOperation() {
 
 			t_global = scale*(R_global*t) + t_global;
 	    	R_global = R_global*R;
+	    	std::cout << t_global.at<double>(0) << std::setw(20) << t_global.at<double>(1) << std::setw(20) 
+	    			  << t_global.at<double>(2) << std::endl;
 		}
 	
 		drawTrajectory(t_global, traj);
