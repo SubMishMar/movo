@@ -6,12 +6,13 @@
 Download:
 ```git clone https://github.com/SubMishMar/movo.git```
 
-build:
+build and execute:
 ```cd movo
 mkdir build
 cd build
 cmake ..
 make -j7
-
+./movo ../datasets/kitti/image_0 ../config/kitti_stereo_calib.yaml
+```
 
 
