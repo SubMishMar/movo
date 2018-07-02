@@ -9,8 +9,9 @@ Download:
 build:
 ```cd movo
 mkdir build
+cd build
 cmake ..
-make -j7```
+make -j7
 
 
 
