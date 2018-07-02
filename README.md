@@ -4,7 +4,8 @@
 
 # Usage instruction
 Download:
-```https://github.com/SubMishMar/movo.git```
+```git clone https://github.com/SubMishMar/movo.git```
+
 build:
 ```cd movo
 mkdir build
