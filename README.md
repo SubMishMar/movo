@@ -3,8 +3,8 @@
 ![Alt text](docs/screenshot.png?raw=true "Screenshot during VO operation")
 
 # Usage instruction
-
-``cd movo
+Download and, 
+```cd movo
 mkdir build
 cmake ..
-make -j7``
+make -j7```
