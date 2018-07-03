@@ -12,6 +12,6 @@ add_executable( movo src/movo.cpp
 		     src/paramreader.cpp
 		     src/featureDetectionAndTracking.cpp 
 		     src/init.cpp )
-target_link_libraries(movo ${OpenCV_LIBS} ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} 
-					   ${PCL_VISUALIZATION_LIBRARIES}
+target_link_libraries(movo ${OpenCV_LIBS} #${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} 
+					  #${PCL_VISUALIZATION_LIBRARIES}
 					   )
