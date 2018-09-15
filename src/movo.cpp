@@ -33,20 +33,6 @@ double movo::getScale(int frame_id) {
   return sqrt((x-x_prev)*(x-x_prev) + (y-y_prev)*(y-y_prev) + (z-z_prev)*(z-z_prev)) ;
 }
 
-double movo::findAvgError(std::vector<cv::Point2f> corners_1,
-					      std::vector<cv::Point2f> corners_2) {
-	size_t j;
-    double diff = 0;
-    for( j = 0; j < corners_1.size(); j++ ){
-      diff += sqrt((corners_1[j].x - corners_2[j].x)*(corners_1[j].x - corners_2[j].x)
-      		+ (corners_1[j].y - corners_2[j].y)*(corners_1[j].y - corners_2[j].y));
-      j++;
-    }
-    diff = diff/j;
-
-    return diff;
-}
-
 cv::Mat movo::epipolarSearch(std::vector<cv::Point2f> corners1,
 					         std::vector<cv::Point2f> corners2,
 					         cv::Mat &R, cv::Mat &t) {
@@ -101,7 +87,7 @@ void movo::continousOperation() {
 		//std::cout << database_corners.size() << "\t" << query_corners.size() << "\t"<< query_id << std::endl;
 		drawmatches(database_img, query_img, database_corners, query_corners);
 
-		mask = epipolarSearch(database_corners, query_corners, R, t);
+		cv::Mat mask = epipolarSearch(database_corners, query_corners, R, t);
 		double scale = getScale(query_id); 
 		//double error = findAvgError(database_corners, query_corners);
 		if(scale>0.1 &&
@@ -138,8 +124,8 @@ void movo::continousOperation() {
 		query_id++;
 
 	}
-	cv::destroyWindow("img1");
-	cv::destroyWindow("img2");
+	cv::destroyWindow("img1_l");
+	cv::destroyWindow("img2_l");
 	cv::destroyWindow("traj");
 }
 

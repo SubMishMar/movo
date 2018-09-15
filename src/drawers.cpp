@@ -11,9 +11,9 @@ void movo::drawmatches(cv::Mat img1, cv::Mat img2,
 		cv::circle(img1_out, corners1[l], 4, CV_RGB(255, 0, 0), -1, 8, 0);
 		cv::circle(img2_out, corners2[l], 4, CV_RGB(255, 0, 0), -1, 8, 0);
 	}	
-	imshow("img1", img1_out);
+	imshow("img1_l", img1_out);
 	cv::waitKey(1);
-	imshow("img2", img2_out);
+	imshow("img2_l", img2_out);
 	cv::waitKey(1);
 }
 
