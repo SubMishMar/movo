@@ -2,6 +2,9 @@
 #include <fstream>
 #include <iomanip>
 #include "movo.h"
+#include <DBoW2/DBoW2.h>
+#include <DBoW2/ScoringObject.h>
+using namespace DBoW2;
 
 double movo::getScale(int frame_id) {
   
@@ -75,10 +78,31 @@ void movo::continousOperation() {
 	R_global = cv::Mat::eye(3, 3, CV_64FC1);
 	t_global = cv::Mat::zeros(3, 1, CV_64FC1);
 
+
+	// For place recognition
+	cv::Ptr<cv::ORB> orb = cv::ORB::create();
+    cv::Mat mask_;
+    std::vector<cv::KeyPoint> keypoints;
+    cv::Mat descriptors;
+    std::vector<std::vector<cv::Mat > > features;
+    orb->detectAndCompute(database_img, mask_, keypoints, descriptors);
+    features.push_back(std::vector<cv::Mat >());
+    changeStructure(descriptors, features.back());
 	while(query_id < filenames_left.size()) {
 
 		undistort(imread(filenames_left[query_id], CV_8UC1), 
 					query_img, K, cv::noArray(), K);
+
+
+	    cv::Mat mask_;
+	    std::vector<cv::KeyPoint> keypoints;
+	    cv::Mat descriptors;
+	    orb->detectAndCompute(query_img, mask_, keypoints, descriptors);
+	    features.push_back(std::vector<cv::Mat >());
+	    changeStructure(descriptors, features.back());
+
+	    //bool loop_detected = loopDetector(features);
+
 		std::vector<uchar> status1, status2;
 		status1 = calculateOpticalFlow(database_img,  query_img,
 									  database_corners, query_corners);
@@ -129,4 +153,20 @@ void movo::continousOperation() {
 	cv::destroyWindow("traj");
 }
 
+void movo::changeStructure(const cv::Mat &plain, std::vector<cv::Mat> &out) {
+  out.resize(plain.rows);
 
+  for(int i = 0; i < plain.rows; ++i){
+    out[i] = plain.row(i);
+  }
+}
+
+bool movo::loopDetector(const std::vector<std::vector<cv::Mat > > &features) {
+  // branching factor and depth levels 
+  const int k = 9;
+  const int L = 3;
+  const WeightingType weight = TF_IDF;
+  const ScoringType score = L1_NORM;
+
+  OrbVocabulary voc(k, L, weight, score);
+}

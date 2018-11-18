@@ -88,4 +88,9 @@ public:
 
 
 	double getScale(int frame_id);
+
+	// For Loop Closure
+	// void loadFeatures(std::vector<std::vector<cv::Mat > > &features, std::vector<cv::String> filenames_left);
+	void changeStructure(const cv::Mat &plain, std::vector<cv::Mat> &out);
+	bool loopDetector(const std::vector<std::vector<cv::Mat > > &features);
 };
