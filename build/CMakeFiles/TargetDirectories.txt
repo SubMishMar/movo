@@ -1,0 +1,3 @@
+/home/subodh/github-projects/movo/build/CMakeFiles/edit_cache.dir
+/home/subodh/github-projects/movo/build/CMakeFiles/rebuild_cache.dir
+/home/subodh/github-projects/movo/build/CMakeFiles/movo.dir

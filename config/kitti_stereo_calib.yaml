@@ -17,10 +17,11 @@ useHarrisDetector: true
 k: 0.04
 winSizeGFTT: 10
 
-#For FAST
-useFAST: False
-fast_threshold: 20
-nonmaxSuppression: true
-winSizeFAST: 10
-
-
+#--------------------------------------------------------------------------------------------
+# ORB Parameters
+#--------------------------------------------------------------------------------------------
+ORBextractornFeatures: 500
+ORBextractorscaleFactor: 1.2
+ORBextractornLevels: 8
+ORBextractoriniThFAST: 20
+ORBextractorminThFAST: 7

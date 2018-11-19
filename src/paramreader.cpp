@@ -20,11 +20,12 @@ void movo::readParams(int argc, char **argv) {
 		fsSettings["k"] >> k;
 		fsSettings["winSizeGFTT"] >> winSizeGFTT;
 
-		fsSettings["fast_threshold"] >> fast_threshold;
-		fsSettings["nonmaxSuppression"] >> nonmaxSuppression;
-		fsSettings["winSizeFAST"] >> winSizeFAST;
+		fsSettings["ORBextractornFeatures"] >> ORBextractornFeatures;
+		fsSettings["ORBextractorscaleFactor"] >> ORBextractorscaleFactor;
+		fsSettings["ORBextractornLevels"] >> ORBextractornLevels;
+		fsSettings["ORBextractoriniThFAST"] >> ORBextractoriniThFAST;
+		fsSettings["ORBextractorminThFAST"] >> ORBextractorminThFAST;
 
-		// fsSettings["useFAST"] >> useFAST;
 		std::cout << "Parameters Loaded Successfully" << std::endl << std::endl;
 	}
 }

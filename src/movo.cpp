@@ -2,9 +2,7 @@
 #include <fstream>
 #include <iomanip>
 #include "movo.h"
-#include <DBoW2/DBoW2.h>
-#include <DBoW2/ScoringObject.h>
-using namespace DBoW2;
+#include "ORBextractor.h"
 
 double movo::getScale(int frame_id) {
   
@@ -53,6 +51,11 @@ cv::Mat movo::epipolarSearch(std::vector<cv::Point2f> corners1,
 }
 
 void movo::continousOperation() {
+    ORBextractor orbextractor(ORBextractornFeatures,
+                              ORBextractorscaleFactor,
+                              ORBextractornLevels,
+                              ORBextractoriniThFAST,
+                              ORBextractorminThFAST);
 	uint database_id = 0;
 	uint query_id = database_id + 1; 
 	std::vector<cv::Point2f> database_corners;
@@ -63,14 +66,17 @@ void movo::continousOperation() {
 
 	rows = database_img.rows;
 	cols = database_img.cols;
+    cv::Mat descriptors;
 
-	detectGoodFeatures(database_img, 
-					   database_corners,
-					   cv::Mat::ones(rows, cols, CV_8UC1));
-
+    std::vector<cv::KeyPoint> database_keypoints, query_keypoints;
+    orbextractor(database_img,
+                 cv::Mat::ones(rows, cols, CV_8UC1),
+                 database_keypoints,
+                 descriptors);
+    cv::KeyPoint::convert(database_keypoints, database_corners);
 	cv::Mat rvec, tvec;
 	std::vector<cv::Point3f> rvecs, tvecs;
-	std::vector<cv::Point2f> query_corners;
+	std::vector<cv::Point2f> query_corners, new_query_corners;
 	std::vector<cv::Point2f> new_candidate_corners;
 
 	
@@ -79,29 +85,12 @@ void movo::continousOperation() {
 	t_global = cv::Mat::zeros(3, 1, CV_64FC1);
 
 
-	// For place recognition
-	cv::Ptr<cv::ORB> orb = cv::ORB::create();
-    cv::Mat mask_;
-    std::vector<cv::KeyPoint> keypoints;
-    cv::Mat descriptors;
-    std::vector<std::vector<cv::Mat > > features;
-    orb->detectAndCompute(database_img, mask_, keypoints, descriptors);
-    features.push_back(std::vector<cv::Mat >());
-    changeStructure(descriptors, features.back());
+
 	while(query_id < filenames_left.size()) {
 
 		undistort(imread(filenames_left[query_id], CV_8UC1), 
 					query_img, K, cv::noArray(), K);
 
-
-	    cv::Mat mask_;
-	    std::vector<cv::KeyPoint> keypoints;
-	    cv::Mat descriptors;
-	    orb->detectAndCompute(query_img, mask_, keypoints, descriptors);
-	    features.push_back(std::vector<cv::Mat >());
-	    changeStructure(descriptors, features.back());
-
-	    //bool loop_detected = loopDetector(features);
 
 		std::vector<uchar> status1, status2;
 		status1 = calculateOpticalFlow(database_img,  query_img,
@@ -112,7 +101,8 @@ void movo::continousOperation() {
 		drawmatches(database_img, query_img, database_corners, query_corners);
 
 		cv::Mat mask = epipolarSearch(database_corners, query_corners, R, t);
-		double scale = getScale(query_id); 
+		//double scale = getScale(query_id);
+		double scale = 1;
 		//double error = findAvgError(database_corners, query_corners);
 		if(scale>0.1 &&
 		   fabs(t.at<double>(2)) > fabs(t.at<double>(1)) &&
@@ -121,8 +111,6 @@ void movo::continousOperation() {
 
 			t_global = scale*(R_global*t) + t_global;
 	    	R_global = R_global*R;
-	    	std::cout << t_global.at<double>(0) << std::setw(20) << t_global.at<double>(1) << std::setw(20) 
-	    			  << t_global.at<double>(2) << std::endl;
 		}
 	
 		drawTrajectory(t_global, traj);
@@ -132,16 +120,25 @@ void movo::continousOperation() {
 		cv::cvtColor(mask_mat, mask_mat_color, CV_GRAY2BGR);
 
 
-		for(int i = 0; i < query_corners.size(); i++) {
-			cv::circle(mask_mat_color, query_corners[i], 
-				15, CV_RGB(0,0,0), -8, 0);
-		}
-		cv::cvtColor(mask_mat_color, mask_mat, CV_BGR2GRAY);
-		
-		detectGoodFeatures(query_img, new_candidate_corners, mask_mat);
 
-		query_corners.insert(query_corners.end(), new_candidate_corners.begin(), 
-			new_candidate_corners.end());
+
+        if(query_corners.size()<500) {
+            std::cout << query_corners.size() << std::endl;
+            for(int i = 0; i < query_corners.size(); i++) {
+                cv::circle(mask_mat_color, query_corners[i],
+                           15, CV_RGB(0,0,0), -8, 0);
+            }
+            cv::cvtColor(mask_mat_color, mask_mat, CV_BGR2GRAY);
+            orbextractor(query_img,
+                         mask_mat,
+                         query_keypoints,
+                         descriptors);
+            cv::KeyPoint::convert(query_keypoints, new_query_corners);
+
+            query_corners.insert(query_corners.end(), new_query_corners.begin(),
+                                 new_query_corners.end());
+            std::cout << query_corners.size() << std::endl << std::endl;
+        }
 
 		database_corners = query_corners;
 		query_img.copyTo(database_img);
@@ -151,22 +148,4 @@ void movo::continousOperation() {
 	cv::destroyWindow("img1_l");
 	cv::destroyWindow("img2_l");
 	cv::destroyWindow("traj");
-}
-
-void movo::changeStructure(const cv::Mat &plain, std::vector<cv::Mat> &out) {
-  out.resize(plain.rows);
-
-  for(int i = 0; i < plain.rows; ++i){
-    out[i] = plain.row(i);
-  }
-}
-
-bool movo::loopDetector(const std::vector<std::vector<cv::Mat > > &features) {
-  // branching factor and depth levels 
-  const int k = 9;
-  const int L = 3;
-  const WeightingType weight = TF_IDF;
-  const ScoringType score = L1_NORM;
-
-  OrbVocabulary voc(k, L, weight, score);
 }

@@ -21,11 +21,12 @@ private:
 	// Calibration Matrix
 	cv::Mat P_L, K;
 
-	// for FAST
-    int fast_threshold;
-    bool nonmaxSuppression;
-    int winSizeFAST;
-
+	// for ORB
+	int ORBextractornFeatures;
+	float ORBextractorscaleFactor;
+	int ORBextractornLevels;
+	int ORBextractoriniThFAST;
+	int ORBextractorminThFAST;
 
     // folder and file names
     std::vector<cv::String> filenames_left;
@@ -40,12 +41,16 @@ private:
 
     //
     double rows, cols;
+	cv::Ptr<cv::ORB> orb;
 
 public:
 	//construtor
 	movo(int argc, char **argv) {
 		readParams(argc, argv);
 		K = P_L(cv::Range(0,3), cv::Range(0, 3));
+		orb = cv::ORB::create(ORBextractornFeatures, ORBextractorscaleFactor,
+				              ORBextractornLevels);
+
 	}
 
 	//reads Params related to all functionalities
@@ -55,6 +60,11 @@ public:
 	void detectGoodFeatures(cv::Mat img, 
 							std::vector<cv::Point2f> &corners,
 							cv::Mat mask_mat);
+
+	void detectORBFeatures(cv::Mat img,
+			               cv::Mat mask_mat,
+			               std::vector<cv::Point2f> &corners,
+			               cv::Mat &descriptors);
 
 	//Caluclates optical flow and returns a status to represent points
 	//for which a valied tracked point has been found
@@ -89,8 +99,5 @@ public:
 
 	double getScale(int frame_id);
 
-	// For Loop Closure
-	// void loadFeatures(std::vector<std::vector<cv::Mat > > &features, std::vector<cv::String> filenames_left);
-	void changeStructure(const cv::Mat &plain, std::vector<cv::Mat> &out);
-	bool loopDetector(const std::vector<std::vector<cv::Mat > > &features);
+
 };

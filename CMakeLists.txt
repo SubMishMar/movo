@@ -12,6 +12,7 @@ add_executable( movo src/movo.cpp
 		     src/drawers.cpp
 		     src/paramreader.cpp
 		     src/featureDetectionAndTracking.cpp 
+		     src/ORBextractor.cpp
 		     src/init.cpp )
 target_link_libraries(movo ${OpenCV_LIBS} 
 	              #${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} 

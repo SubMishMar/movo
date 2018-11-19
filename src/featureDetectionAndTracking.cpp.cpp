@@ -14,6 +14,20 @@ void movo::detectGoodFeatures(cv::Mat img,
 				 	cv::Size(-1, -1), termcrit);
 }
 
+void movo::detectORBFeatures(cv::Mat img,
+                             cv::Mat mask_mat,
+                             std::vector<cv::Point2f> &corners,
+                             cv::Mat &descriptors) {
+    cv::TermCriteria termcrit =
+            cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 0.01);
+    std::vector<cv::KeyPoint> keypoints;
+    orb->detectAndCompute(img, mask_mat, keypoints, descriptors);
+    cv::KeyPoint::convert(keypoints, corners);
+    if(corners.size() > 0)
+        cornerSubPix(img, corners, cv::Size(winSizeGFTT/2, winSizeGFTT/2),
+                     cv::Size(-1, -1), termcrit);
+}
+
 std::vector<uchar> movo::calculateOpticalFlow(cv::Mat img1, cv::Mat img2, 
 							  				  std::vector<cv::Point2f> &corners1,
 							  				  std::vector<cv::Point2f> &corners2) {
