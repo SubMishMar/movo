@@ -66,6 +66,7 @@ void movo::continousOperation() {
 
 	rows = database_img.rows;
 	cols = database_img.cols;
+	//std::cout << rows << "\t" << cols << std::endl;
     cv::Mat descriptors;
 
     std::vector<cv::KeyPoint> database_keypoints, query_keypoints;
@@ -120,25 +121,13 @@ void movo::continousOperation() {
 		cv::cvtColor(mask_mat, mask_mat_color, CV_GRAY2BGR);
 
 
+        std::cout << query_corners.size() << std::endl;
 
-
-        if(query_corners.size()<500) {
-            std::cout << query_corners.size() << std::endl;
-            for(int i = 0; i < query_corners.size(); i++) {
-                cv::circle(mask_mat_color, query_corners[i],
-                           15, CV_RGB(0,0,0), -8, 0);
-            }
-            cv::cvtColor(mask_mat_color, mask_mat, CV_BGR2GRAY);
-            orbextractor(query_img,
-                         mask_mat,
-                         query_keypoints,
-                         descriptors);
-            cv::KeyPoint::convert(query_keypoints, new_query_corners);
-
-            query_corners.insert(query_corners.end(), new_query_corners.begin(),
-                                 new_query_corners.end());
-            std::cout << query_corners.size() << std::endl << std::endl;
-        }
+        orbextractor(query_img,
+                     mask_mat,
+                     query_keypoints,
+                     descriptors);
+        cv::KeyPoint::convert(query_keypoints, query_corners);
 
 		database_corners = query_corners;
 		query_img.copyTo(database_img);
