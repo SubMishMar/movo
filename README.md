@@ -14,11 +14,9 @@ For kitti dataset
 
 ```
   roslaunch odometry odometry_kitti_node.launch
-  
 ```
 
 For Basler dataset
 ```
   roslaunch odometry odometry_pylon_node.launch
-  
 ```
