@@ -10,3 +10,7 @@ alt="kitti" width="320" height="240" border="10" /></a>
 
 ## Launch Instructions
 
+For kitti dataset
+
+```roslaunch odometry odometry_kitti_node.launch
+```
