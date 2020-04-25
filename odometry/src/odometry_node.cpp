@@ -112,6 +112,8 @@ private:
 
     double max_dist;
     double rep_err;
+    int wait_window_size;
+    double triang_ang_threshold;
 
 public:
     Odometry(ros::NodeHandle nh) {
@@ -126,11 +128,16 @@ public:
         fsSettings["sensor_name"] >> sensor_name;
         fsSettings["max_dist"] >> max_dist;
         fsSettings["rep_err"] >> rep_err;
+        fsSettings["wait_window_size"] >> wait_window_size;
+        fsSettings["triang_ang_threshold"] >> triang_ang_threshold;
 
         ROS_INFO_STREAM("Image Topic: " << image_topic);
         ROS_INFO_STREAM("Sensor Name: " << sensor_name);
         ROS_INFO_STREAM("Max Triangulation Dist: " << max_dist);
         ROS_INFO_STREAM("Rep Err for PnP: " << rep_err);
+        ROS_INFO_STREAM("Wait window size: " << wait_window_size);
+        ROS_INFO_STREAM("Angle Threshold: " << triang_ang_threshold);
+
         image_sub = new
                 message_filters::Subscriber
                         <sensor_msgs::Image>(n, image_topic, 1);
@@ -188,7 +195,7 @@ public:
     }
 
     void viewTrajectory(Eigen::Vector3d XYZ) {
-        int x = -int(XYZ.z()) + 800;
+        int x = -int(XYZ.z()) + 950;
         int y = int(XYZ.x()) + 500;
         circle(traj, cv::Point(y, x), 1, CV_RGB(255, 0, 0), 2);
         imshow( "Visual Odometry Trajectory", traj);
@@ -317,14 +324,14 @@ public:
             }
         }
 
-        int no_of_matches = init_pts.size();
+//        int no_of_matches = init_pts.size();
 //        ROS_INFO_STREAM("No of matches: " << no_of_matches);
-        double sum = 0;
-        for(int i = 0; i < no_of_matches; i++) {
-            cv::Point2d difference = init_pts[i] - curr_pts[i];
-            sum += sqrt(difference.dot(difference));
-        }
-        sum /=  no_of_matches;
+//        double sum = 0;
+//        for(int i = 0; i < no_of_matches; i++) {
+//            cv::Point2d difference = init_pts[i] - curr_pts[i];
+//            sum += sqrt(difference.dot(difference));
+//        }
+//        sum /=  no_of_matches;
 
         cv::Mat mask;
         cv::Mat E = cv::findFundamentalMat(init_pts, curr_pts,
@@ -351,7 +358,7 @@ public:
                                          inlier_match_points2,
                                          cameraMatrix,
                                          rot, trans, mask);
-        if(sum*460 > 30 || inlier_cnt > 50) {
+        if(/*sum*460 > 30 && */inlier_cnt > 50) {
             std::vector<cv::Point2d> triangulation_points1, triangulation_points2;
             std::vector<cv::Point2d> triangulation_points1_uv, triangulation_points2_uv;
             std::vector<int> triangulation_ids;
@@ -376,7 +383,7 @@ public:
                                           point3d_homo0);
             assert(point3d_homo0.cols == triangulation_points1.size());
 
-            double dist = 50.0;
+            double dist = max_dist;
             cv::Mat mask_trg = point3d_homo0.row(2).mul(point3d_homo0.row(3)) > 0;
             point3d_homo0.row(0) /= point3d_homo0.row(3);
             point3d_homo0.row(1) /= point3d_homo0.row(3);
@@ -424,6 +431,7 @@ public:
                         pt1.z = point3d_homo1.at<double>(2, i);
                         points3d1_homo_good.push_back(pt1);
 
+
                         good_features_1_uv.push_back(triangulation_points1_uv[i]);
                         good_features_2_uv.push_back(triangulation_points2_uv[i]);
 
@@ -443,8 +451,9 @@ public:
                                            good_features_1_uv, good_features_2_uv);
                 }
                 initialized = true;
-                ROS_WARN_STREAM("Initialized!! at frame: " << frame_no << " With " << map_points_id.size() << " points");
+                ROS_WARN_STREAM("Initialized at frame: " << frame_no << " With " << map_points_id.size() << " points");
                 std::cout << std::endl;
+//                ros::shutdown();
             } else {
                 ROS_WARN_STREAM("Not enough points after triangulation. check 'dist'");
             }
@@ -551,9 +560,9 @@ public:
     }
 
     void recoverPosebyPnP() {
-        ROS_WARN_STREAM("Current Frame No: " << frame_no);
-        ROS_WARN_STREAM("No of map points: " << map_points_id.size());
-        ROS_WARN_STREAM("No of points waiting: " << triangulation_candidates.size());
+        ROS_INFO_STREAM("Current Frame No: " << frame_no);
+        ROS_INFO_STREAM("No of map points: " << map_points_id.size());
+        ROS_INFO_STREAM("No of features detected: " << curr_features.size());
         cv::Mat rvec, tvec;
         // Match 2D-3D correspondences
         std::vector<cv::Point2d> features_2d;
@@ -596,8 +605,10 @@ public:
         assert(match_indices.size() == features_3d.size());
 
         // Remove Map Points which do not match
-        for(int i = 0; i < remove_indices.size(); i++)
-            map_points_id.erase(map_points_id.begin()+remove_indices[i]);
+        for(int i = 0; i < remove_indices.size(); i++) {
+            int remove_index = remove_indices[i]-i;
+            map_points_id.erase(map_points_id.begin() + remove_index);
+        }
 
         int no_of_3d_2d_matches = features_2d.size();
 
@@ -613,7 +624,7 @@ public:
         std::vector<cv::Point2d> feature_2d_uv_outlier_free;
         std::vector<int> match_indices_outlier_free;
         remove_indices.clear();
-        ROS_WARN_STREAM("No of points used in SolvePnP: " << features_3d.size());
+        ROS_INFO_STREAM("No of points used in SolvePnP: " << features_3d.size());
         cv::solvePnPRansac(features_3d, features_2d, K, D, rvec, tvec,
                 false, 100,
                            rep_err / 460.0,
@@ -628,8 +639,7 @@ public:
             int n = inliers.at<int>(i);
             status[n] = 1;
         }
-//        if(status.size() == 0)
-//            ROS_ERROR_STREAM("No Inliers for SolvePnP");
+
         for( int i = 0; i < status.size(); i++) {
             if((int)status[i] != 0) {
                 inlier_count++;
@@ -641,11 +651,14 @@ public:
                 remove_indices.push_back(i);
             }
         }
-
+        ROS_INFO_STREAM("% of inliers post PnP: " << 100.0f*(double)inlier_count/(double)features_3d.size());
+//        ROS_INFO_STREAM("rvec: " << rvec.t() << " tvec: " << tvec.t());
         assert(remove_indices.size()+inlier_count == features_3d.size());
         // Remove Map Points which prove to be outliers
-        for(int i = 0; i < remove_indices.size(); i++)
-            map_points_id.erase(map_points_id.begin()+remove_indices[i]);
+        for(int i = 0; i < remove_indices.size(); i++) {
+            int remove_index = remove_indices[i] - i;
+            map_points_id.erase(map_points_id.begin()+ remove_index);
+        }
 
         std::vector<cv::Point2d> projected_features;
         cv::projectPoints(feature_3d_outlier_free,
@@ -682,8 +695,7 @@ public:
         }
         sum_rep_err  /= feature_2d_uv_outlier_free.size();
 
-        ROS_WARN_STREAM("% of inliers post PnP: " << 100.0f*(double)inlier_count/(double)features_3d.size());
-        ROS_WARN_STREAM("Mean Rep Err= " << sum_rep_err);
+        ROS_INFO_STREAM("Mean Rep Err= " << sum_rep_err);
 
         cv::Mat R_cv;
         cv::Rodrigues(rvec, R_cv);
@@ -705,18 +717,94 @@ public:
         w_T_i = w_T_i * T_;
         Eigen::Matrix3d Rotn_ = w_T_i.block(0, 0, 3, 3);
         Eigen::Vector3d Trans_ = w_T_i.block(0, 3, 3, 1);
-        ROS_WARN_STREAM("Frame by  Frame Trans: \n" << Rotation.eulerAngles(0, 1, 2).transpose()*180/M_PI << " " << Translation.transpose());
+        ROS_INFO_STREAM("Frame by  Frame Trans: \n" << Rotation.eulerAngles(0, 1, 2).transpose()*180/M_PI << " " << Translation.transpose());
         viewTrajectory(w_T_i.block(0, 3, 3, 1));
         cv::resize(curr_image, curr_image,
                        cv::Size(0, 0), 1, 1);
-
-        if(sensor_name == "pylon")
-            resize(curr_image, curr_image, cv::Size(0, 0), 0.5, 0.5);
-        cv::imshow("Visual Odometry Tracking", curr_image);
-        cv::waitKey(1);
-
+        dispTrackingImage(curr_image);
         triangulateNewLandMarks(R_cv, tvec);
+//        triangulateNewLandMarks2(R_cv, tvec);
         std::cout << std::endl;
+    }
+
+    void triangulateNewLandMarks2(cv::Mat R_cv, cv::Mat t_cv) {
+        Eigen::Matrix3d R_eig, R_eiginv;
+        Eigen::Vector3d t_eig, t_eiginv;
+        cv::cv2eigen(R_cv, R_eig);
+        cv::cv2eigen(t_cv, t_eig);
+        R_eiginv = R_eig.inverse();
+        t_eiginv = -R_eiginv*t_eig;
+        std::vector<int> unmapped_ids;
+        for(int i = 0; i < common_ids.size(); i++) {
+            bool found_in_map = false;
+            for(int j = 0; j < map_points_id.size(); j++) {
+                if(common_ids[i] == map_points_id[j].id) {
+                    found_in_map = true;
+                    break;
+                }
+            }
+            if(!found_in_map)
+                unmapped_ids.push_back(common_ids[i]);
+        }
+        std::vector<cv::Point2d> prev_pts_xy;
+        std::vector<cv::Point2d> curr_pts_xy;
+        for(int i = 0; i < unmapped_ids.size(); i++) {
+            int query_id = unmapped_ids[i];
+            for(int j = 0; j < prev_features.size(); j++) {
+                if(query_id == prev_features[j].id) {
+                    prev_pts_xy.push_back(prev_features[j].point_xy);
+                    break;
+                }
+            }
+            for(int j = 0; j < curr_features.size(); j++) {
+                if(query_id == curr_features[j].id) {
+                    curr_pts_xy.push_back(curr_features[j].point_xy);
+                    break;
+                }
+            }
+        }
+        assert(curr_pts_xy.size() == prev_pts_xy.size());
+        cv::Mat Rt0 = cv::Mat::eye(3, 4, CV_64FC1);
+        cv::Mat Rt1 = cv::Mat::eye(3, 4, CV_64FC1);
+        R_cv.copyTo(Rt1.rowRange(0,3).colRange(0,3));
+        t_cv.copyTo(Rt1.rowRange(0,3).col(3));
+        cv::Mat point3d_homo0;
+        cv::Mat point3d_homo1;
+        cv::triangulatePoints(Rt0, Rt1, prev_pts_xy, curr_pts_xy,
+                              point3d_homo0);
+        cv::Mat mask_trg =
+                point3d_homo0.row(2).mul(point3d_homo0.row(3)) > 0;
+
+        point3d_homo0.row(0) /= point3d_homo0.row(3);
+        point3d_homo0.row(1) /= point3d_homo0.row(3);
+        point3d_homo0.row(2) /= point3d_homo0.row(3);
+        point3d_homo0.row(3) /= point3d_homo0.row(3);
+
+        point3d_homo1 = Rt1*point3d_homo0;
+        mask_trg = (point3d_homo1.row(2) > 0) & mask_trg;
+
+        assert(point3d_homo0.cols == point3d_homo1.cols);
+        int goodPoints = countNonZero(mask_trg);
+        for(int i = 0; i < mask_trg.cols; i++) {
+            if(mask_trg.at<unsigned char>(i)) {
+                Eigen::Vector3d pt0;
+                pt0.x() = point3d_homo0.at<double>(0, i);
+                pt0.y() = point3d_homo0.at<double>(1, i);
+                pt0.z() = point3d_homo0.at<double>(2, i);
+                Eigen::Vector3d pt1;
+                pt1.x() = point3d_homo1.at<double>(0, i);
+                pt1.y() = point3d_homo1.at<double>(1, i);
+                pt1.z() = point3d_homo1.at<double>(2, i);
+                Eigen::Vector3d vec_0 = -pt0;
+                Eigen::Vector3d vec_1 = t_eiginv - pt0;
+
+                double cosAngle = vec_0.dot(vec_1)/(vec_0.norm()*vec_1.norm());
+                double angle = acos(cosAngle);
+                angle = atan2(sin(angle), cos(angle));
+                angle = angle*180/M_PI;
+                ROS_INFO_STREAM("Angle: " << angle << " Z: " << pt0.z());
+            }
+        }
     }
 
     void addLandmarksToWaitList(std::vector<int> ids) {
@@ -842,18 +930,26 @@ public:
                     Eigen::Vector3d ptXYZ_curr = Eigen::Vector3d(point3d_homo1.at<double>(0),
                                                                  point3d_homo1.at<double>(1),
                                                                  point3d_homo1.at<double>(2));
-                    Eigen::Vector3d vec_0 = -ptXYZ_wait;
-                    Eigen::Vector3d vec_1 =
-                            wait_T_curr.block(0, 3, 3, 1)
-                            - ptXYZ_wait;
+//                    Eigen::Vector3d vec_0 = -ptXYZ_wait;
+//                    Eigen::Vector3d vec_1 =
+//                            wait_T_curr.block(0, 3, 3, 1)
+//                            - ptXYZ_wait;
+                    Eigen::Vector3d vec_0 = ptXYZ_wait;
+                    Eigen::Vector3d vec_1 = ptXYZ_curr;
 
                     double cosAngle = vec_0.dot(vec_1)/(vec_0.norm()*vec_1.norm());
                     double angle = acos(cosAngle);
                     angle = atan2(sin(angle), cos(angle));
                     angle = angle*180/M_PI;
                     avg_angle_value += fabs(angle);
-//                    ROS_WARN_STREAM("Angle: " << angle);
-                    if (fabs(angle) > 0.1) {
+
+                    if (fabs(angle) > triang_ang_threshold) {
+//                        ROS_WARN_STREAM("vec0: [" << vec_0.x() << ", " << vec_0.y()<< ", " << vec_0.z() << " ]");
+//                        ROS_WARN_STREAM("vec1: [" << vec_1.x() << ", " << vec_1.y()<< ", " << vec_1.z()  << " ]");
+//                        ROS_WARN_STREAM("Angle: " << angle);
+//                        std::cout << std::endl;
+//                        ROS_WARN_STREAM("Angle: " << angle << ", Z: " << ptXYZ_wait.z()
+//                                          << ", frame_diff: :  " << curr_feature.ref_frame - fIDPose.image_frame_no);
                         mapPoint mp_id;
                         mp_id.pointXYZ = cv::Point3d(ptXYZ_wait.x(), ptXYZ_wait.y(), ptXYZ_wait.z());
                         mp_id.id = fIDPose.id;
@@ -864,20 +960,41 @@ public:
                         map_points_id.push_back(mp_id);
                         remove_waiting_indices.push_back(wait_index);
                     }
+//                    } else {
+//                        ROS_INFO_STREAM("Angle: " << angle << ", Z: " << ptXYZ_wait.z()
+//                                          << ", frame_diff: :  " << curr_feature.ref_frame - fIDPose.image_frame_no);
+//                    }
                 }
             }
         }
-//        ROS_WARN_STREAM("Avg parallex angle: " << avg_angle_value/(double)remove_waiting_indices.size());
-        for(int i = 0; i < remove_waiting_indices.size(); i++)
-            triangulation_candidates.erase(triangulation_candidates.begin()+remove_waiting_indices[i]);
-        remove_waiting_indices.clear();
 
-        for(int i = 0; i < triangulation_candidates.size(); i++){
-            if(fabs(frame_no-triangulation_candidates[i].image_frame_no) > 5)
-                remove_waiting_indices.push_back(i);
+        for(int i = 0; i < remove_waiting_indices.size(); i++) {
+            int remove_index = remove_waiting_indices[i] - i;
+            triangulation_candidates.erase(triangulation_candidates.begin() + remove_index);
         }
-        for(int i = 0; i < remove_waiting_indices.size(); i++)
-            triangulation_candidates.erase(triangulation_candidates.begin()+remove_waiting_indices[i]);
+
+        std::vector<int> remove_waiting_indices2;
+        for(int i = 0; i < triangulation_candidates.size(); i++){
+            double frame_diff = frame_no-triangulation_candidates[i].image_frame_no;
+            assert(frame_diff > 0);
+            if(frame_diff > wait_window_size) {
+//                ROS_WARN_STREAM("Removing frame: " << triangulation_candidates[i].image_frame_no << ", at frame: " << frame_no);
+                remove_waiting_indices2.push_back(i);
+            }
+        }
+        std::cout << std::endl;
+        for(int i = 0; i < remove_waiting_indices2.size(); i++) {
+            int remove_index = remove_waiting_indices2[i]-i;
+            triangulation_candidates.erase(triangulation_candidates.begin() + remove_index);
+        }
+
+//        for(int i = 0; i < triangulation_candidates.size(); i++){
+//            double frame_diff = frame_no-triangulation_candidates[i].image_frame_no;
+//            assert(frame_diff > 0);
+//            if(frame_diff > 5) {
+//                ROS_WARN_STREAM("<frame no, triangulation frame>: ( " << frame_no << ", " << triangulation_candidates[i].image_frame_no << ")");
+//            }
+//        }
     }
 
     void triangulateNewLandMarks(cv::Mat R, cv::Mat t) {
@@ -907,7 +1024,7 @@ public:
             // Check if candidates in the waiting list could be mapped
             // Those. that can be mapped must be added to the mapped list and removed from waiting list
             addLandmarksToMap();
-            // unmapped_ids can be divided into waiting)ids and non_waiting_ids
+            // unmapped_ids can be divided into waiting_ids and non_waiting_ids
             // non_waiting_ids must be added to the waiting list
             std::pair<std::vector<int>, std::vector<int> > waiting_nonwaiting_ids =
                     separateWaitngAndNonWaitingIds(unmapped_ids);
@@ -917,6 +1034,14 @@ public:
             if(!non_waiting_ids.empty())
                 addLandmarksToWaitList(non_waiting_ids);
         }
+    }
+
+    void dispTrackingImage(cv::Mat disp_img) {
+        cv::Mat input_img = disp_img;
+        if(sensor_name == "pylon")
+            cv::resize(input_img, input_img, cv::Size(), 0.5, 0.5);
+        imshow("Visual Odometry Tracking", input_img);
+        cv::waitKey(1);
     }
 
     void track() {
@@ -961,6 +1086,7 @@ public:
 
         if(!first_frame) {
             if(!initialized) {
+                dispTrackingImage(curr_image);
                 initialize();
             } else {
                 track();

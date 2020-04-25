@@ -30,8 +30,12 @@ show_track: 1           # publish tracking image as topic
 equalize: 1             # if image is too dark or light, trun on equalize to find enough features
 fisheye: 0              # if using fisheye, trun on it. A circle mask will be loaded to remove edge noisy points
 
+#solvePnP
+rep_err: 0.1
+
 #triangulation
 max_dist: 1000
-rep_err: 0.5
+wait_window_size: 10
+triang_ang_threshold: 1
 
 

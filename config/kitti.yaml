@@ -23,15 +23,19 @@ projection_parameters:
 
 #feature traker parameters
 max_cnt: 1000          # max feature number in feature tracking
-min_dist: 20            # min distance between two features 
+min_dist: 30            # min distance between two features 
 freq: 10                # frequence (Hz) of publish tracking result. At least 10Hz for good estimation. If set 0, the frequence will be same as raw image 
 F_threshold: 1.0        # ransac threshold (pixel)
 show_track: 1           # publish tracking image as topic
 equalize: 1             # if image is too dark or light, trun on equalize to find enough features
 fisheye: 0              # if using fisheye, trun on it. A circle mask will be loaded to remove edge noisy points
 
-#triangulation
-max_dist: 50
+#solvePnP
 rep_err: 3
+
+#triangulation
+max_dist: 250
+wait_window_size: 3
+triang_ang_threshold: 0.1
 
 
