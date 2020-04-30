@@ -7,6 +7,7 @@ alt="offroad" width="320" height="240" border="10" /></a>
 alt="kitti" width="320" height="240" border="10" /></a>
 
 ## Datasets
+A bag file from the kitti dataset can be found [here](https://drive.google.com/a/tamu.edu/file/d/1qLUkfHIDTzxIVfaOFqIsrVKcxPlSz3_f/view?usp=sharing)
 
 ## Launch Instructions
 
