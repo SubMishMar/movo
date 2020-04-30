@@ -13,6 +13,9 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   message_filters
   cv_bridge
+  geometry_msgs
+  nav_msgs
+  pcl_conversions
 )
 find_package(PCL REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -142,6 +145,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(${PROJECT_NAME}_node src/odometry_node.cpp)
+add_executable(path_publisher_node src/path_publisher_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -161,6 +165,12 @@ target_link_libraries(${PROJECT_NAME}_node
    ${PCL_LIBRARIES}
 )
 
+target_link_libraries(path_publisher_node
+   ${catkin_LIBRARIES}
+   ${OpenCV_LIBS}
+   ${Eigen3_LIBRARIES}
+   ${PCL_LIBRARIES}
+)
 #############
 ## Install ##
 #############

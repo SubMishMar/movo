@@ -12,4 +12,7 @@
         <param name="config_file" type="string" value="$(arg config_path)" />
     </node>
      
+    
+    <node pkg="odometry" type="path_publisher_node" name="path_publisher_node"  output="screen" />
+
 </launch>

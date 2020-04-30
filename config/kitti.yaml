@@ -3,6 +3,7 @@
 #common parameters
 image_topic: "/kitti/camera_color_left/image_raw"
 sensor_name: "kitti"
+debug_file_name: "/home/usl/catkin_ws/src/mocal/visual-odometry/odometry/debug/debug.csv"
 
 #camera calibration 
 model_type: PINHOLE

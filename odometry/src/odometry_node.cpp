@@ -16,21 +16,26 @@
 
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/PointCloud.h>
-
+#include <sensor_msgs/PointCloud2.h>
 
 #include <sensor_msgs/ChannelFloat32.h>
+
+#include <geometry_msgs/PoseStamped.h>>
 
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <pcl/common/common_headers.h>
 #include <pcl/visualization/pcl_visualizer.h>
+#include <pcl_conversions/pcl_conversions.h>
 
 #include <message_filters/subscriber.h>
 #include <message_filters/synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
 
 #include <cv_bridge/cv_bridge.h>
+
+#include <fstream>
 
 typedef message_filters::sync_policies::ApproximateTime
         <sensor_msgs::Image,
@@ -73,6 +78,9 @@ private:
     message_filters::Subscriber<sensor_msgs::PointCloud> *cloud_sub;
     message_filters::Synchronizer<SyncPolicy> *sync;
 
+    ros::Publisher pose_pub;
+    ros::Publisher cloud_pub;
+
     std::vector<pointWiD> curr_features;
     std::vector<int> curr_idx;
     std::vector<pointWiD> prev_features;
@@ -97,13 +105,14 @@ private:
     cv::Mat curr_image;
 
     std::vector<mapPoint> map_points_id;
+    std::vector<Eigen::Vector4d> published_points;
 
     std::vector<point3DWiD> _3dPoints_k_1;
     std::vector<point3DWiD> _3dPoints_k;
     int frame_no;
 
     Eigen::Matrix4d w_T_i;
-
+    Eigen::Matrix4d w_T_i_view;
     std::vector<feature_id_pose>  triangulation_candidates;
 
     cv::Mat traj;
@@ -114,6 +123,11 @@ private:
     double rep_err;
     int wait_window_size;
     double triang_ang_threshold;
+
+    std::string debug_file_name;
+    std::ofstream debug_file;
+
+    ros::Time time_stamp;
 
 public:
     Odometry(ros::NodeHandle nh) {
@@ -130,6 +144,7 @@ public:
         fsSettings["rep_err"] >> rep_err;
         fsSettings["wait_window_size"] >> wait_window_size;
         fsSettings["triang_ang_threshold"] >> triang_ang_threshold;
+        fsSettings["debug_file_name"] >> debug_file_name;
 
         ROS_INFO_STREAM("Image Topic: " << image_topic);
         ROS_INFO_STREAM("Sensor Name: " << sensor_name);
@@ -137,6 +152,7 @@ public:
         ROS_INFO_STREAM("Rep Err for PnP: " << rep_err);
         ROS_INFO_STREAM("Wait window size: " << wait_window_size);
         ROS_INFO_STREAM("Angle Threshold: " << triang_ang_threshold);
+        ROS_INFO_STREAM("Debug file name: " << debug_file_name);
 
         image_sub = new
                 message_filters::Subscriber
@@ -149,6 +165,8 @@ public:
                                                              *cloud_sub);
         sync->registerCallback(boost::bind(&Odometry::callback, this, _1, _2));
 
+        pose_pub = n.advertise<geometry_msgs::PoseStamped>("/vo_pose", 1);
+        cloud_pub = n.advertise<sensor_msgs::PointCloud2>("/cloud", 1);
 
         K_ = cv::Mat::zeros(3, 3, CV_64F);
         D_ = cv::Mat::zeros(1, 5, CV_64F);
@@ -175,10 +193,11 @@ public:
         frame_no = 0;
 
         w_T_i = Eigen::Matrix4d::Identity();
-
+        w_T_i_view = Eigen::Matrix4d::Identity();
         traj = cv::Mat::zeros(1000, 1000, CV_8UC3);
         cv::namedWindow("Visual Odometry Tracking");
-        relative_scale = 1;
+//        relative_scale = 1;
+        debug_file.open(debug_file_name.c_str());
     }
 
     template <typename T>
@@ -413,8 +432,9 @@ public:
                 Translation = -R.transpose() * T;
                 w_T_i.block<3, 3>(0, 0) = Rotation;
                 w_T_i.block<3, 1>(0, 3) = Translation;
-                ROS_WARN_STREAM("Frame by  Frame Trans: \n" << Rotation.eulerAngles(0, 1, 2).transpose()*180/M_PI << " " << Translation.transpose());
-                viewTrajectory(w_T_i.block(0, 3, 3, 1));
+                w_T_i_view = w_T_i;
+//                ROS_WARN_STREAM("Frame by  Frame Trans: \n" << Rotation.eulerAngles(0, 1, 2).transpose()*180/M_PI << " " << Translation.transpose());
+                viewTrajectory(w_T_i_view.block(0, 3, 3, 1));
                 std::vector<cv::Point3d> points3d0_homo_good(goodPoints);
                 std::vector<cv::Point3d> points3d1_homo_good(goodPoints);
                 for(int i = 0; i < mask_trg.cols; i++) {
@@ -463,8 +483,6 @@ public:
     }
 
     double getRelativeScale(cv::Mat rvec, cv::Mat tvec) {
-//        std::vector<int> common_indices =
-//                getMatchIds(prev_idx, curr_idx);
         std::vector<cv::Point2d> prev_pts;
         std::vector<cv::Point2d> curr_pts;
         // Find common ids
@@ -498,7 +516,7 @@ public:
                               point3d_homo0);
         assert(point3d_homo0.cols == prev_pts.size());
 
-        double dist = 50.0;
+        double dist = max_dist;
         cv::Mat mask_trg = point3d_homo0.row(2).mul(point3d_homo0.row(3)) > 0;
         point3d_homo0.row(0) /= point3d_homo0.row(3);
         point3d_homo0.row(1) /= point3d_homo0.row(3);
@@ -542,6 +560,7 @@ public:
         double count = 0;
         double sum = 0;
         double threshold = 0.00001;
+        std::vector<double> scale_vector;
         for(int i = 0; i < n-1; i++) {
             for(int j = i+1; j < n; j++) {
                 double dist_k = cv::norm(X_k[i] - X_k[j]);
@@ -549,14 +568,20 @@ public:
                 if(dist_k < threshold)
                     continue;
                 count += 1;
-                sum +=  dist_k_1/dist_k;
+                scale_vector.push_back(dist_k_1/dist_k);
             }
         }
-        ROS_INFO_STREAM("Count = " << count);
-        sum /= count;
-        if(isnan(sum) || isinf(sum))
-            sum = 1;
-        return sum;
+//        ROS_INFO_STREAM("Count = " << count);
+        int size = scale_vector.size();
+        if( size == 0)
+            return 1;
+//        debug_file << sum << "\n";
+        std::sort(scale_vector.begin(), scale_vector.end());
+        if (size % 2 == 0) {
+            return (scale_vector[size / 2 - 1] + scale_vector[size / 2]) / 2;
+        } else {
+            return scale_vector[size / 2];
+        }
     }
 
     void recoverPosebyPnP() {
@@ -630,6 +655,7 @@ public:
                            rep_err / 460.0,
                            0.99, inliers);
 //        relative_scale = getRelativeScale(rvec, tvec);
+        relative_scale = 1;
 //        ROS_INFO_STREAM("Relative Scale: " << getRelativeScale(rvec, tvec));
 
         for (int i = 0; i < (int)features_2d.size(); i++)
@@ -661,8 +687,7 @@ public:
         }
 
         std::vector<cv::Point2d> projected_features;
-        cv::projectPoints(feature_3d_outlier_free,
-                rvec, relative_scale*tvec, K_, D_,
+        cv::projectPoints(feature_3d_outlier_free, rvec, tvec, K_, D_,
                 projected_features, cv::noArray(), 0);
 
 
@@ -712,99 +737,51 @@ public:
         Rotation = R.transpose();
         Translation = -R.transpose() * T;
         Eigen::Matrix4d T_ = Eigen::Matrix4d::Identity();
+        Eigen::Matrix4d T_view = Eigen::Matrix4d::Identity();
         T_.block<3, 3>(0, 0) = Rotation;
-        T_.block<3, 1>(0, 3) = relative_scale*Translation;
+        T_.block<3, 1>(0, 3) = Translation;
+        T_view.block<3, 3>(0, 0) = Rotation;
+        T_view.block<3, 1>(0, 3) = relative_scale*Translation;
         w_T_i = w_T_i * T_;
+        publishPose(w_T_i);
+        w_T_i_view = w_T_i_view*T_view;
         Eigen::Matrix3d Rotn_ = w_T_i.block(0, 0, 3, 3);
         Eigen::Vector3d Trans_ = w_T_i.block(0, 3, 3, 1);
-        ROS_INFO_STREAM("Frame by  Frame Trans: \n" << Rotation.eulerAngles(0, 1, 2).transpose()*180/M_PI << " " << Translation.transpose());
-        viewTrajectory(w_T_i.block(0, 3, 3, 1));
+//        ROS_INFO_STREAM("Frame by  Frame Trans: \n" << Rotation.eulerAngles(0, 1, 2).transpose()*180/M_PI << " " << Translation.transpose());
+        viewTrajectory(w_T_i_view.block(0, 3, 3, 1));
         cv::resize(curr_image, curr_image,
                        cv::Size(0, 0), 1, 1);
         dispTrackingImage(curr_image);
+
         triangulateNewLandMarks(R_cv, tvec);
-//        triangulateNewLandMarks2(R_cv, tvec);
         std::cout << std::endl;
     }
 
-    void triangulateNewLandMarks2(cv::Mat R_cv, cv::Mat t_cv) {
-        Eigen::Matrix3d R_eig, R_eiginv;
-        Eigen::Vector3d t_eig, t_eiginv;
-        cv::cv2eigen(R_cv, R_eig);
-        cv::cv2eigen(t_cv, t_eig);
-        R_eiginv = R_eig.inverse();
-        t_eiginv = -R_eiginv*t_eig;
-        std::vector<int> unmapped_ids;
-        for(int i = 0; i < common_ids.size(); i++) {
-            bool found_in_map = false;
-            for(int j = 0; j < map_points_id.size(); j++) {
-                if(common_ids[i] == map_points_id[j].id) {
-                    found_in_map = true;
-                    break;
-                }
-            }
-            if(!found_in_map)
-                unmapped_ids.push_back(common_ids[i]);
-        }
-        std::vector<cv::Point2d> prev_pts_xy;
-        std::vector<cv::Point2d> curr_pts_xy;
-        for(int i = 0; i < unmapped_ids.size(); i++) {
-            int query_id = unmapped_ids[i];
-            for(int j = 0; j < prev_features.size(); j++) {
-                if(query_id == prev_features[j].id) {
-                    prev_pts_xy.push_back(prev_features[j].point_xy);
-                    break;
-                }
-            }
-            for(int j = 0; j < curr_features.size(); j++) {
-                if(query_id == curr_features[j].id) {
-                    curr_pts_xy.push_back(curr_features[j].point_xy);
-                    break;
-                }
-            }
-        }
-        assert(curr_pts_xy.size() == prev_pts_xy.size());
-        cv::Mat Rt0 = cv::Mat::eye(3, 4, CV_64FC1);
-        cv::Mat Rt1 = cv::Mat::eye(3, 4, CV_64FC1);
-        R_cv.copyTo(Rt1.rowRange(0,3).colRange(0,3));
-        t_cv.copyTo(Rt1.rowRange(0,3).col(3));
-        cv::Mat point3d_homo0;
-        cv::Mat point3d_homo1;
-        cv::triangulatePoints(Rt0, Rt1, prev_pts_xy, curr_pts_xy,
-                              point3d_homo0);
-        cv::Mat mask_trg =
-                point3d_homo0.row(2).mul(point3d_homo0.row(3)) > 0;
+    void publishPose(Eigen::Matrix4d T) {
+        geometry_msgs::PoseStamped pose;
+        pose.header.stamp = time_stamp;
+        pose.header.frame_id = "world";
 
-        point3d_homo0.row(0) /= point3d_homo0.row(3);
-        point3d_homo0.row(1) /= point3d_homo0.row(3);
-        point3d_homo0.row(2) /= point3d_homo0.row(3);
-        point3d_homo0.row(3) /= point3d_homo0.row(3);
+        Eigen::Matrix4d T_off;
+        T_off << 0, 0, 1, 0,
+                -1, 0, 0, 0,
+                 0, -1, 0, 0,
+                 0, 0, 0, 1;
+        Eigen::Matrix4d T_w = T_off*T*T_off.inverse();
+        Eigen::Matrix3d R_w = T_w.block(0, 0, 3, 3);
+        Eigen::Vector3d t_w = T_w.block(0, 3, 3, 1);
+        ROS_INFO_STREAM("Position: " << t_w.transpose());
+        Eigen::Quaterniond quat(R_w);
+        ROS_INFO_STREAM("Quaternion: " << quat.x() << " " << quat.y() << " " << quat.z() << " " << quat.w());
+        pose.pose.position.x = t_w.x();
+        pose.pose.position.y = t_w.y();
+        pose.pose.position.z = t_w.z();
+        pose.pose.orientation.x = quat.x();
+        pose.pose.orientation.y = quat.y();
+        pose.pose.orientation.z = quat.z();
+        pose.pose.orientation.w = quat.w();
 
-        point3d_homo1 = Rt1*point3d_homo0;
-        mask_trg = (point3d_homo1.row(2) > 0) & mask_trg;
-
-        assert(point3d_homo0.cols == point3d_homo1.cols);
-        int goodPoints = countNonZero(mask_trg);
-        for(int i = 0; i < mask_trg.cols; i++) {
-            if(mask_trg.at<unsigned char>(i)) {
-                Eigen::Vector3d pt0;
-                pt0.x() = point3d_homo0.at<double>(0, i);
-                pt0.y() = point3d_homo0.at<double>(1, i);
-                pt0.z() = point3d_homo0.at<double>(2, i);
-                Eigen::Vector3d pt1;
-                pt1.x() = point3d_homo1.at<double>(0, i);
-                pt1.y() = point3d_homo1.at<double>(1, i);
-                pt1.z() = point3d_homo1.at<double>(2, i);
-                Eigen::Vector3d vec_0 = -pt0;
-                Eigen::Vector3d vec_1 = t_eiginv - pt0;
-
-                double cosAngle = vec_0.dot(vec_1)/(vec_0.norm()*vec_1.norm());
-                double angle = acos(cosAngle);
-                angle = atan2(sin(angle), cos(angle));
-                angle = angle*180/M_PI;
-                ROS_INFO_STREAM("Angle: " << angle << " Z: " << pt0.z());
-            }
-        }
+        pose_pub.publish(pose);
     }
 
     void addLandmarksToWaitList(std::vector<int> ids) {
@@ -930,10 +907,10 @@ public:
                     Eigen::Vector3d ptXYZ_curr = Eigen::Vector3d(point3d_homo1.at<double>(0),
                                                                  point3d_homo1.at<double>(1),
                                                                  point3d_homo1.at<double>(2));
-//                    Eigen::Vector3d vec_0 = -ptXYZ_wait;
-//                    Eigen::Vector3d vec_1 =
-//                            wait_T_curr.block(0, 3, 3, 1)
-//                            - ptXYZ_wait;
+                    Eigen::Vector4d ptXYZ_W = w_T_waiting*Eigen::Vector4d(ptXYZ_wait.x(),
+                                                                          ptXYZ_wait.y(),
+                                                                          ptXYZ_wait.z(),
+                                                                          1);
                     Eigen::Vector3d vec_0 = ptXYZ_wait;
                     Eigen::Vector3d vec_1 = ptXYZ_curr;
 
@@ -944,12 +921,7 @@ public:
                     avg_angle_value += fabs(angle);
 
                     if (fabs(angle) > triang_ang_threshold) {
-//                        ROS_WARN_STREAM("vec0: [" << vec_0.x() << ", " << vec_0.y()<< ", " << vec_0.z() << " ]");
-//                        ROS_WARN_STREAM("vec1: [" << vec_1.x() << ", " << vec_1.y()<< ", " << vec_1.z()  << " ]");
-//                        ROS_WARN_STREAM("Angle: " << angle);
-//                        std::cout << std::endl;
-//                        ROS_WARN_STREAM("Angle: " << angle << ", Z: " << ptXYZ_wait.z()
-//                                          << ", frame_diff: :  " << curr_feature.ref_frame - fIDPose.image_frame_no);
+                        published_points.push_back(ptXYZ_W);
                         mapPoint mp_id;
                         mp_id.pointXYZ = cv::Point3d(ptXYZ_wait.x(), ptXYZ_wait.y(), ptXYZ_wait.z());
                         mp_id.id = fIDPose.id;
@@ -960,14 +932,10 @@ public:
                         map_points_id.push_back(mp_id);
                         remove_waiting_indices.push_back(wait_index);
                     }
-//                    } else {
-//                        ROS_INFO_STREAM("Angle: " << angle << ", Z: " << ptXYZ_wait.z()
-//                                          << ", frame_diff: :  " << curr_feature.ref_frame - fIDPose.image_frame_no);
-//                    }
                 }
             }
         }
-
+        publishCloud();
         for(int i = 0; i < remove_waiting_indices.size(); i++) {
             int remove_index = remove_waiting_indices[i] - i;
             triangulation_candidates.erase(triangulation_candidates.begin() + remove_index);
@@ -995,6 +963,22 @@ public:
 //                ROS_WARN_STREAM("<frame no, triangulation frame>: ( " << frame_no << ", " << triangulation_candidates[i].image_frame_no << ")");
 //            }
 //        }
+    }
+
+    void publishCloud() {
+        sensor_msgs::PointCloud2 ros_cloud;
+        pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
+        for(int i = 0; i < published_points.size(); i++) {
+            pcl::PointXYZ pt;
+            pt.x = published_points[i].z();
+            pt.y = -published_points[i].x();
+            pt.z = -published_points[i].y();
+            pcl_cloud.points.push_back(pt);
+        }
+        pcl::toROSMsg(pcl_cloud, ros_cloud);
+        ros_cloud.header.frame_id = "world";
+        ros_cloud.header.stamp = time_stamp;
+        cloud_pub.publish(ros_cloud);
     }
 
     void triangulateNewLandMarks(cv::Mat R, cv::Mat t) {
@@ -1051,6 +1035,7 @@ public:
 
     void callback(const sensor_msgs::ImageConstPtr &image_msg,
                   const sensor_msgs::PointCloudConstPtr &cloud_msg) {
+        time_stamp = cloud_msg->header.stamp;
         curr_image.release();
         curr_features.clear();
         curr_idx.clear();

@@ -3,6 +3,7 @@
 #common parameters
 image_topic: "/pylon_camera_node/image_raw"
 sensor_name: "pylon"
+debug_file_name: "/home/usl/catkin_ws/src/mocal/visual-odometry/odometry/debug/debug.csv"
 
 #camera calibration 
 model_type: PINHOLE
